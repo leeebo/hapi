@@ -33,6 +33,10 @@ function getCodexSessionCwd(session: CodexLocalSessionSummary): string | null {
     return cwd ? cwd : null
 }
 
+function getCodexSessionProject(session: CodexLocalSessionSummary): string | null {
+    return session.projectRoot?.trim() || getCodexSessionCwd(session)
+}
+
 function isOriginalCodexSession(session: CodexLocalSessionSummary): boolean {
     return session.threadSource === 'user' || !session.forkedFromId
 }
@@ -96,22 +100,25 @@ export function CodexSessionSyncDialog(props: {
     const workdirOptions = useMemo(() => {
         const directories = new Set<string>()
         for (const session of sessions) {
-            const cwd = getCodexSessionCwd(session)
-            if (cwd) directories.add(cwd)
+            const project = getCodexSessionProject(session)
+            if (project) directories.add(project)
         }
         return Array.from(directories).sort((a, b) => a.localeCompare(b))
     }, [sessions])
     const defaultWorkdirFilter = useMemo(() => {
         const directory = currentWorkDirectory?.trim()
-        if (!directory || !workdirOptions.includes(directory)) return ALL_WORKDIR_FILTER
-        return directory
-    }, [currentWorkDirectory, workdirOptions])
+        if (!directory) return ALL_WORKDIR_FILTER
+        const matches = new Set(sessions.filter(session => getCodexSessionCwd(session) === directory)
+            .map(getCodexSessionProject).filter((project): project is string => Boolean(project)))
+        if (matches.size === 1) return [...matches][0]
+        return workdirOptions.includes(directory) ? directory : ALL_WORKDIR_FILTER
+    }, [currentWorkDirectory, sessions, workdirOptions])
     const filteredSessions = useMemo(() => {
         const query = searchQuery.trim().toLowerCase()
         return sessions.filter((session) => {
-            if (workdirFilter !== ALL_WORKDIR_FILTER && getCodexSessionCwd(session) !== workdirFilter) return false
+            if (workdirFilter !== ALL_WORKDIR_FILTER && getCodexSessionProject(session) !== workdirFilter) return false
             if (!query) return true
-            return [session.title, session.lastUserMessage, session.cwd, session.originator, session.cliVersion, session.id]
+            return [session.title, session.lastUserMessage, session.projectRoot, session.cwd, session.originator, session.cliVersion, session.id]
                 .filter((value): value is string => typeof value === 'string' && value.length > 0)
                 .some((value) => value.toLowerCase().includes(query))
         })
@@ -144,7 +151,7 @@ export function CodexSessionSyncDialog(props: {
 
     useEffect(() => {
         if (!isOpen || isLoading || hasInitializedWorkdirFilter || sessions.length === 0) return
-        // 中文注释：必须等本地 transcript 列表加载完成后再按当前目录初始化，否则从目录树 + 进入时会因选项未加载而落到“全部目录”。
+        // 中文注释：必须等本地 transcript 列表加载完成后再按当前目录初始化，按已核实的项目根关联当前工作目录。
         setWorkdirFilter(defaultWorkdirFilter)
         setHasInitializedWorkdirFilter(true)
     }, [defaultWorkdirFilter, hasInitializedWorkdirFilter, isLoading, isOpen, sessions.length])
@@ -231,13 +238,10 @@ export function CodexSessionSyncDialog(props: {
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className="max-w-xl">
+            <DialogContent className="max-h-[calc(100dvh-24px)] max-w-xl overflow-y-auto">
                 <div className="flex items-start justify-between gap-3 pr-10" data-testid="codex-import-dialog-header">
                     <DialogHeader className="min-w-0 flex-1 pr-0 text-left">
                         <DialogTitle>{t('codexSync.confirm.title')}</DialogTitle>
-                        <DialogDescription className="mt-2">
-                            {t('codexSync.confirm.description')}
-                        </DialogDescription>
                     </DialogHeader>
                     <Button
                         type="button"
@@ -253,6 +257,9 @@ export function CodexSessionSyncDialog(props: {
                         {isRestartingCodexDesktop ? t('codexSync.restart.confirming') : t('codexSync.restart.tooltip')}
                     </Button>
                 </div>
+                <DialogDescription className="mt-2">
+                    {t('codexSync.confirm.description')}
+                </DialogDescription>
 
                 <div className="mt-4 space-y-3">
                     {archiveError ? (
@@ -290,7 +297,7 @@ export function CodexSessionSyncDialog(props: {
 
                     {sessions.length > 0 ? (
                         <label className="block min-w-0 text-xs text-[var(--app-hint)]">
-                            <span className="mb-1 block">{t('codexSync.confirm.cwdFilter')}</span>
+                            <span className="mb-1 block">{t('codexSync.confirm.projectFilter')}</span>
                             <SelectControl
                                 className="h-8 rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] pl-2 text-xs text-[var(--app-fg)] outline-none focus:ring-2 focus:ring-[var(--app-link)]"
                                 value={workdirFilter}
@@ -298,7 +305,7 @@ export function CodexSessionSyncDialog(props: {
                                 onChange={(event) => setWorkdirFilter(event.target.value)}
                             >
                                 <option value={ALL_WORKDIR_FILTER}>
-                                    {t('codexSync.confirm.cwdFilterAll')}
+                                    {t('codexSync.confirm.projectFilterAll')}
                                 </option>
                                 {workdirOptions.map((directory) => (
                                     <option key={directory} value={directory}>

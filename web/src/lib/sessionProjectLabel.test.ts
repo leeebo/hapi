@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { getSessionProjectLabel, getSessionProjectPath } from './sessionProjectLabel'
 
 describe('session project labels', () => {
+    it('uses verified project identity without claiming worktree ownership', () => {
+        expect(getSessionProjectPath({ path: '/checkouts/feature', projectRoot: '/projects/repo' })).toBe('/projects/repo')
+    })
     it('uses the repository path for worktree sessions', () => {
         expect(getSessionProjectPath({
             path: '/work/hapi-worktrees/fix-resume',

@@ -2381,6 +2381,11 @@ export class SessionCache {
             changed = true
         }
 
+        if (typeof oldObj.projectRoot === 'string' && typeof newObj.projectRoot !== 'string') {
+            merged.projectRoot = oldObj.projectRoot
+            changed = true
+        }
+
         if (oldObj.worktree && !newObj.worktree) {
             merged.worktree = oldObj.worktree
             changed = true

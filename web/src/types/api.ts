@@ -241,6 +241,7 @@ export type CodexLocalSessionSummary = {
     title: string
     lastUserMessage?: string | null
     cwd?: string | null
+    projectRoot?: string | null
     file: string
     modifiedAt: number
     originator?: string | null

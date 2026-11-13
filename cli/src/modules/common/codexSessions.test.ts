@@ -63,6 +63,23 @@ describe('archiveLocalCodexSession', () => {
 describe('listLocalCodexSessionSummaries', () => {
     const originalCodexHome = process.env.CODEX_HOME
 
+    it('uses original creation time, never mutable file time, and leaves missing dates unknown', () => {
+        const root = mkdtempSync(join(tmpdir(), 'codex-created-at-'))
+        process.env.CODEX_HOME = root
+        const dir = join(root, 'sessions')
+        mkdirSync(dir)
+        for (const [id, timestamp] of [['dated', '2026-01-01T00:00:00Z'], ['missing', undefined], ['invalid', 'bad']]) {
+            const path = join(dir, `${id}.jsonl`)
+            writeFileSync(path, JSON.stringify({ type: 'session_meta', payload: { id, timestamp, cwd: root } }) + '\n')
+            utimesSync(path, new Date(), new Date())
+        }
+        const sessions = listLocalCodexSessionSummaries()
+        expect(sessions.find(s => s.id === 'dated')?.createdAt).toBe(Date.parse('2026-01-01T00:00:00Z'))
+        expect(sessions.find(s => s.id === 'missing')?.createdAt).toBeUndefined()
+        expect(sessions.find(s => s.id === 'invalid')?.createdAt).toBeUndefined()
+        rmSync(root, { recursive: true, force: true })
+    })
+
     afterEach(() => {
         if (originalCodexHome === undefined) delete process.env.CODEX_HOME
         else process.env.CODEX_HOME = originalCodexHome

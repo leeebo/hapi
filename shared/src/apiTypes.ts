@@ -256,8 +256,10 @@ export const CodexLocalSessionSummarySchema = z.object({
     title: z.string(),
     lastUserMessage: z.string().nullable().optional(),
     cwd: z.string().nullable().optional(),
+    projectRoot: z.string().nullable().optional(),
     file: z.string().min(1),
     modifiedAt: z.number(),
+    createdAt: z.number().finite().positive().optional(),
     originator: z.string().nullable().optional(),
     cliVersion: z.string().nullable().optional(),
     source: z.string().nullable().optional(),
@@ -271,6 +273,7 @@ export const CodexLocalSessionWithMessagesSchema = CodexLocalSessionSummarySchem
 
 export const ListCodexSessionsRpcRequestSchema = z.object({
     cwd: z.string().nullable().optional(),
+    all: z.boolean().optional(),
     sessionIds: z.array(z.string().min(1)).optional()
 })
 

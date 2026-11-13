@@ -1,3 +1,4 @@
+import { attachProjectRoots, readTranscriptPreview } from '@hapi/protocol/projectRoot'
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { spawn, spawnSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
@@ -61,6 +62,7 @@ type CodexLocalSessionSummary = {
     title: string
     lastUserMessage?: string | null
     cwd?: string | null
+    projectRoot?: string | null
     file: string
     modifiedAt: number
     originator?: string | null
@@ -501,7 +503,7 @@ function parseCodexLocalSession(
 ): CodexLocalSessionSummary | null {
     let content: string
     try {
-        content = readFileSync(filePath, 'utf-8')
+        content = readTranscriptPreview(filePath)
     } catch {
         return null
     }
@@ -599,7 +601,7 @@ function listLocalCodexSessions(limit = DEFAULT_CODEX_SESSION_SCAN_LIMIT): Codex
         }
     }
 
-    return Array.from(deduped.values())
+    return attachProjectRoots(Array.from(deduped.values()))
         .sort((a, b) => b.modifiedAt - a.modifiedAt)
         .slice(0, limit)
 }
@@ -993,6 +995,7 @@ function buildImportedSessionMetadata(
     return {
         ...(existingMetadata ?? {}),
         path,
+        ...(typeof data.projectRoot === 'string' ? { projectRoot: data.projectRoot } : {}),
         host,
         os: osValue,
         name: data.title,
@@ -1986,7 +1989,9 @@ function createImportSuccessResponse(
     }
 }
 
-function importSingleCodexSession(options: {
+export function importSingleCodexSession(options: {
+    automatic?: boolean
+    enableProject?: boolean
     codexSessionId: string
     localSessionsById: Map<string, CodexLocalSessionSummary | RemoteCodexSession>
     store: Store
@@ -2040,7 +2045,7 @@ function importSingleCodexSession(options: {
         if (activeCandidate) {
             throw new Error('Cannot sync Codex transcript while the matching HAPI session is active')
         }
-        const target = selectImportTargetSession(
+        const target = options.automatic ? { sessionId: null, comparablePrefixCount: 0 } : selectImportTargetSession(
             options.store,
             candidates,
             options.codexSessionId,
@@ -2130,6 +2135,17 @@ function importSingleCodexSession(options: {
             `SUCCESS: codexSessionId=${options.codexSessionId}; hapiSessionId=${sessionId}; created=${created}; appended=${appendedMessages.length}`
         )
 
+        if (options.machineId) {
+            options.store.codexAutoImport.remember(options.namespace, options.machineId, options.codexSessionId)
+            const projectRoot = transcript.projectRoot || transcript.cwd
+            if (options.enableProject && projectRoot) {
+                options.store.codexAutoImport.enable({
+                    namespace: options.namespace, machineId: options.machineId,
+                    projectRoot, enabledAt: Date.now()
+                })
+            }
+        }
+
         return {
             success: true,
             message: created ? 'Codex session imported into a new Hapi session' : 'Codex session appended to existing Hapi session',
@@ -2151,6 +2167,7 @@ function importSingleCodexSession(options: {
 }
 
 export async function importSelectedCodexSessions(options: {
+    enableProject?: boolean
     codexSessionIds: string[]
     store: Store
     namespace: string
@@ -2171,8 +2188,9 @@ export async function importSelectedCodexSessions(options: {
     const localSessionsById = new Map((options.localSessions ?? listLocalCodexSessions()).map((session) => [session.id, session]))
     const results: ScriptLaunchResponse[] = []
     for (const codexSessionId of codexSessionIds) {
-        const result = importSingleCodexSession({
+        const result = options.store.codexAutoImport.transaction(() => importSingleCodexSession({
             codexSessionId,
+            enableProject: options.enableProject,
             localSessionsById,
             store: options.store,
             namespace: options.namespace,
@@ -2181,7 +2199,7 @@ export async function importSelectedCodexSessions(options: {
             modelReasoningEffort: options.modelReasoningEffort,
             yolo: options.yolo,
             machineId: options.machineId
-        })
+        }))
         results.push(result)
 
         if (result.success && (options.serviceTier !== undefined || options.collaborationMode !== undefined)) {
@@ -2292,6 +2310,10 @@ export function createCodexDesktopRoutes(options: {
         return c.json({ success: true, archivedPath: (result as { archivedPath: string }).archivedPath, machineId })
     })
 
+    app.get('/codex/auto-import-projects', (c) => c.json({
+        projects: options.store.codexAutoImport.list().filter(p => p.namespace === c.get('namespace'))
+    }))
+
     app.post('/codex/sync-session', async (c) => {
         const codexStatus = getCodexDesktopStatus()
         const body = await c.req.json().catch(() => null)
@@ -2328,6 +2350,7 @@ export function createCodexDesktopRoutes(options: {
         }
         const result = await importSelectedCodexSessions({
             codexSessionIds: parsed.sessionIds,
+            enableProject: true,
             store: options.store,
             namespace: c.get('namespace'),
             getSyncEngine: options.getSyncEngine,

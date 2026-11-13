@@ -1,3 +1,4 @@
+import { attachProjectRoots, readTranscriptPreview } from '@hapi/protocol/projectRoot'
 import { closeSync, existsSync, mkdirSync, openSync, readSync, readdirSync, readFileSync, renameSync, statSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { basename, dirname, join, relative } from 'node:path'
@@ -27,8 +28,10 @@ export type LocalCodexSessionSummary = {
     title: string
     lastUserMessage?: string | null
     cwd?: string | null
+    projectRoot?: string | null
     file: string
     modifiedAt: number
+    createdAt?: number
     originator?: string | null
     cliVersion?: string | null
     source?: string | null
@@ -305,11 +308,12 @@ function parseCodexLocalSession(
     sessionIndexTitles = new Map<string, CodexSessionIndexTitle>()
 ): LocalCodexSessionWithMessages | LocalCodexSessionSummary | null {
     let content: string
-    try { content = readFileSync(filePath, 'utf-8') } catch { return null }
+    try { content = includeMessages ? readFileSync(filePath, 'utf-8') : readTranscriptPreview(filePath) } catch { return null }
     const lines = content.split(/\r?\n/).filter(Boolean)
     const headLines = lines.slice(0, 200)
     let sessionId: string | null = null
     let cwd: string | null = null
+    let createdAt: number | undefined
     let originator: string | null = null
     let cliVersion: string | null = null
     let source: string | null = null
@@ -334,6 +338,8 @@ function parseCodexLocalSession(
             if (!record) continue
             if (record.type === 'session_meta') {
                 const payload = asRecord(record.payload)
+                const timestamp = Date.parse(String(payload?.timestamp ?? record.timestamp ?? ''))
+                if (createdAt === undefined && Number.isFinite(timestamp) && timestamp > 0) createdAt = timestamp
                 if (isCodexSubagentSource(payload?.source)) return null
                 if (!sessionId && typeof payload?.id === 'string') sessionId = payload.id
                 if (!cwd && typeof payload?.cwd === 'string') cwd = payload.cwd
@@ -367,6 +373,7 @@ function parseCodexLocalSession(
         cwd,
         file: filePath,
         modifiedAt,
+        createdAt,
         originator,
         cliVersion,
         source,
@@ -389,7 +396,7 @@ function listLocalCodexSessions(includeMessages: boolean, limit = DEFAULT_CODEX_
         const previous = deduped.get(session.id)
         if (!previous || previous.modifiedAt < session.modifiedAt) deduped.set(session.id, session)
     }
-    return Array.from(deduped.values()).sort((a, b) => b.modifiedAt - a.modifiedAt).slice(0, limit)
+    return attachProjectRoots(Array.from(deduped.values())).sort((a, b) => b.modifiedAt - a.modifiedAt).slice(0, limit)
 }
 
 export function listLocalCodexSessionSummaries(limit = DEFAULT_CODEX_SESSION_SCAN_LIMIT): LocalCodexSessionSummary[] {
@@ -447,6 +454,9 @@ export function listLocalCodexSessionsWithMessagesByIds(ids: Set<string>): Local
             if (session && session.id === id && 'messages' in session) { result.push(session); break }
         }
     }
+    // Include summary paths so Git registrations can resolve selected deleted worktrees.
+    const summaries = listLocalCodexSessionSummaries(Number.MAX_SAFE_INTEGER)
+    attachProjectRoots([...summaries, ...result])
     return result.sort((a, b) => b.modifiedAt - a.modifiedAt)
 }
 

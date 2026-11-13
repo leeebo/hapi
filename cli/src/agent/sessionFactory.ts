@@ -1,3 +1,4 @@
+import { resolveProjectRoots } from '@hapi/protocol/projectRoot'
 import os from 'node:os'
 import { randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
@@ -122,6 +123,7 @@ export function buildSessionMetadata(options: {
 
     return {
         path: options.workingDirectory,
+        projectRoot: options.flavor === 'codex' ? resolveProjectRoots([options.workingDirectory]).get(options.workingDirectory) : undefined,
         host: process.env.HAPI_HOSTNAME || os.hostname(),
         version: packageJson.version,
         os: os.platform(),
@@ -156,6 +158,7 @@ function pickExistingSessionMetadata(metadata: Metadata | null | undefined): Par
 
     const preserved: Partial<Metadata> = {}
 
+    if (metadata.projectRoot !== undefined) preserved.projectRoot = metadata.projectRoot
     if (metadata.name !== undefined) preserved.name = metadata.name
     if (metadata.summary !== undefined) preserved.summary = metadata.summary
     if (metadata.acpManualTitle !== undefined) preserved.acpManualTitle = metadata.acpManualTitle

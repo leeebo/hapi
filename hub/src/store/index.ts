@@ -1,4 +1,5 @@
 import { Database } from 'bun:sqlite'
+import { CodexAutoImportStore } from './codexAutoImportStore'
 import { chmodSync, closeSync, existsSync, mkdirSync, openSync } from 'node:fs'
 import { dirname } from 'node:path'
 
@@ -84,6 +85,7 @@ export class Store {
     private readonly _dbPath: string
     private closed: boolean = false
 
+    readonly codexAutoImport: CodexAutoImportStore
     readonly sessions: SessionStore
     readonly machines: MachineStore
     readonly messages: MessageStore
@@ -141,6 +143,7 @@ export class Store {
             }
         }
 
+        this.codexAutoImport = new CodexAutoImportStore(this.db)
         this.sessions = new SessionStore(this.db)
         this.machines = new MachineStore(this.db)
         this.messages = new MessageStore(this.db)

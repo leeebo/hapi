@@ -21,6 +21,20 @@ pins come first, followed by the same user-input order. Project and machine
 groups use their pinned state and newest member's ordering key, not live
 activity. There is no fixed-order preference to configure.
 
+Manual Codex history selection filters by **Project**. Git main checkouts and
+linked worktrees share a verified project root; each history row still shows its
+actual working directory. Imported sessions use that root for grouping on the
+same machine, while their native thread IDs and execution directories remain
+unchanged through resume. Successful manual imports also enable project-scoped passive
+imports, as described in [Automatic Codex history import](#automatic-codex-history-import-for-enabled-projects).
+
+Project identity comes from Git's common directory and worktree registrations,
+not matching directory names. Deleted worktrees can be associated when their
+exact paths remain registered in a repository discovered in the history scan.
+Pruned, inaccessible, or otherwise unverified paths fall back to separate working
+directories. History previews read bounded file headers and tails; older titles
+or prompts in the middle of very large transcripts may not appear in previews.
+
 The Hub persists the original user-message timestamp, including local CLI
 input. Historical imports and duplicate/echoed messages do not acquire a fresh
 ordering timestamp. Deletion or rewind does not rewind this monotonic clock.
@@ -120,3 +134,32 @@ collapsed or expanded. The browser remembers that choice. Each group shows up
 to 20 matches, ordered by relevance and recency; names, directories, and
 machine labels affect matching. Empty stubs are never mention targets, and
 collapsing inactive sessions does not hide file suggestions.
+
+### Automatic Codex history import for enabled projects
+
+A successful **manual import** from the Codex session picker (`POST /api/codex/sync-session`)
+opts that machine's project into passive imports. Opening the picker, starting a HAPI
+session, or importing a different project does not enable it. Identity is
+`namespace + machineId + projectRoot` (falling back to cwd for non-Git directories),
+so registered worktrees share the same subscription without changing their actual cwd.
+
+On the first Hub startup with this feature, projects represented by existing imported
+sessions receive a **new enablement timestamp at startup**, not their historical import
+dates. This baseline is stored once. Repeated manual imports and Hub restarts do not
+move it. `GET /api/codex/auto-import-projects` returns the authenticated namespace's
+subscriptions and `enabledAt` Unix milliseconds.
+
+Every 30 seconds, the Hub asks online Runners for complete summaries. Only native main
+sessions with `thread_source` equal to `user` or `agent_created_thread`, and a transcript
+creation timestamp strictly after enablement, qualify. Missing/invalid timestamps and
+other thread types are excluded; file modification times never establish newness.
+Older history is not backfilled. An empty transcript is retried when it has content.
+Runner disconnection or a failed transcript does not advance a watermark; reconnect
+catches up eligible new sessions without a recent-N limit.
+
+An automatic import takes one passive history snapshot. It does not resume the agent,
+submit a task, or continuously mirror subsequent messages. Durable native-ID receipts
+make rescans and restarts idempotent and survive deletion of the HAPI session. Explicit
+manual re-import remains possible. The project remains enabled after deleting its last
+imported session. Project subscriptions and receipts are additive SQLite tables and are
+retained when rolling back to an older binary; no global sync script is involved.

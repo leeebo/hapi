@@ -1,5 +1,6 @@
 import { createConfiguration, type ConfigSource } from './configuration'
 import { Store } from './store'
+import { CodexProjectAutoImport } from './sync/codexProjectAutoImport'
 import { SyncEngine, type SyncEvent } from './sync/syncEngine'
 import { NotificationHub } from './notifications/notificationHub'
 import type { NotificationChannel } from './notifications/notificationTypes'
@@ -210,6 +211,8 @@ export async function startHub(options: StartHubOptions = {}): Promise<HubInstan
     })
 
     syncEngine = new SyncEngine(store, socketServer.io, socketServer.rpcRegistry, sseManager)
+    const codexAutoImport = new CodexProjectAutoImport(store, syncEngine)
+    codexAutoImport.start()
     // Accountable principal for A2A work-graph notify ingest (P3).
     syncEngine.setHubOwnerUserId(await getOrCreateOwnerId())
 
@@ -392,6 +395,7 @@ export async function startHub(options: StartHubOptions = {}): Promise<HubInstan
 
     return {
         stop: async () => {
+            codexAutoImport.stop()
             await tunnelManager?.stop()
             await happyBot?.stop()
             notificationHub?.stop()

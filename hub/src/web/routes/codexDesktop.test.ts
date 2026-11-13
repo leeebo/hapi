@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'bun:test'
+import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -381,6 +382,27 @@ describe('Codex Desktop import routes', () => {
         } else {
             process.env.CODEX_HOME = originalCodexHome
         }
+    })
+
+    it('imports a verified project root while retaining native identity and actual cwd', async () => {
+        const base = mkdtempSync(join(tmpdir(), 'codex-project-import-'))
+        const main = join(base, 'main')
+        const linked = join(base, 'linked')
+        mkdirSync(main)
+        execFileSync('git', ['init', '-q', main])
+        execFileSync('git', ['-C', main, '-c', 'user.name=Test', '-c', 'user.email=test@example.test', 'commit', '-q', '--allow-empty', '-m', 'fixture'])
+        execFileSync('git', ['-C', main, 'worktree', 'add', '-q', '--detach', linked])
+        process.env.CODEX_HOME = join(base, 'native')
+        const id = randomUUID()
+        createTranscript(process.env.CODEX_HOME, id, linked)
+        const store = new Store(':memory:')
+        try {
+            const result = await importSelectedCodexSessions({ codexSessionIds: [id], namespace: 'default', store })
+            expect(result.success).toBe(true)
+            const session = store.sessions.getSessionsByNamespace('default')[0]
+            expect(session.metadata).toMatchObject({ path: linked, projectRoot: main, codexSessionId: id })
+            expect((session.metadata as Record<string, unknown>).worktree).toBeUndefined()
+        } finally { rmSync(base, { recursive: true, force: true }) }
     })
 
     it('imports normal response_item chat messages', async () => {

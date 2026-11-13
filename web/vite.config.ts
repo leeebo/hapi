@@ -130,7 +130,7 @@ export default defineConfig({
                 // Splash background stays light; only the status bar needed to become adaptive.
                 background_color: '#ffffff',
                 display: 'standalone',
-                orientation: 'portrait',
+                orientation: 'any',
                 scope: base,
                 start_url: base,
                 icons: [

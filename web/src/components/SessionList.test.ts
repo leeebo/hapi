@@ -50,6 +50,20 @@ function makeSession(overrides: Partial<SessionSummary> & { id: string }): Sessi
     }
 }
 
+describe('imported project grouping', () => {
+    it('groups different cwd paths only within the same machine and project', () => {
+        const sessions = [
+            makeSession({ id: 'a', metadata: { path: '/repo', projectRoot: '/repo', machineId: 'm1' } }),
+            makeSession({ id: 'b', metadata: { path: '/worktrees/b', projectRoot: '/repo', machineId: 'm1' } }),
+            makeSession({ id: 'c', metadata: { path: '/repo', projectRoot: '/repo', machineId: 'm2' } }),
+            makeSession({ id: 'd', metadata: { path: '/other/repo', projectRoot: '/other/repo', machineId: 'm1' } })
+        ]
+        const groups = groupSessionsByDirectory(sessions)
+        expect(groups).toHaveLength(3)
+        expect(groups.some(group => group.sessions.length === 2 && group.sessions.some(session => session.id === 'a') && group.sessions.some(session => session.id === 'b'))).toBe(true)
+    })
+})
+
 describe('getWorktreeSessionLabel', () => {
     it('returns the worktree name for sessions grouped under a shared repository', () => {
         const session = makeSession({

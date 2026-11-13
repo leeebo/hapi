@@ -256,6 +256,7 @@ describe('bootstrapExistingSession', () => {
 
         session.metadata = {
             ...existingMetadata,
+            projectRoot: '/projects/main',
             claudeSessionId: 'claude-thread-1',
             codexSessionId: 'codex-thread-1',
             geminiSessionId: 'gemini-thread-1',
@@ -304,8 +305,11 @@ describe('bootstrapExistingSession', () => {
             workingDirectory: '/tmp/project'
         })
 
+        expect(result.metadata.path).toBe('/tmp/project')
+        expect(result.metadata.worktree).toBeUndefined()
         expect(result.metadata).toEqual(expect.objectContaining({
             acpManualTitle: true,
+            projectRoot: '/projects/main',
             claudeSessionId: 'claude-thread-1',
             codexSessionId: 'codex-thread-1',
             geminiSessionId: 'gemini-thread-1',

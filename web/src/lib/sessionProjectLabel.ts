@@ -2,6 +2,7 @@ import { getPathDisplayName } from '@/utils/path'
 
 export type SessionProjectMetadata = {
     path?: string | null
+    projectRoot?: string | null
     worktree?: {
         basePath?: string | null
     } | null
@@ -9,6 +10,7 @@ export type SessionProjectMetadata = {
 
 /** Use the repository path for worktrees and the session path otherwise. */
 export function getSessionProjectPath(metadata: SessionProjectMetadata | null | undefined): string | null {
+    if (metadata?.projectRoot?.trim()) return metadata.projectRoot.trim()
     if (metadata?.worktree) {
         return metadata.worktree.basePath?.trim() || null
     }

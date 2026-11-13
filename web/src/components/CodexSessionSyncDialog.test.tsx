@@ -36,6 +36,21 @@ describe('CodexSessionSyncDialog', () => {
         window.localStorage.clear()
     })
 
+    it('selects all checkouts of the current project without changing cwd or mixing namesakes', async () => {
+        const sessions = [
+            { id: 'root', title: 'Root session', cwd: '/projects/repo', projectRoot: '/projects/repo' },
+            { id: 'linked', title: 'Linked session', cwd: '/worktrees/feature', projectRoot: '/projects/repo' },
+            { id: 'other', title: 'Other session', cwd: '/other/repo', projectRoot: '/other/repo' }
+        ].map(session => ({ ...session, file: `${session.id}.jsonl`, modifiedAt: 1 }))
+        const { onConfirm } = renderDialog(sessions, undefined, null, undefined, '/worktrees/feature')
+        expect(screen.getByLabelText('Project')).toHaveValue('/projects/repo')
+        expect(screen.getByText('Root session')).toBeInTheDocument()
+        expect(screen.getByText('Linked session')).toBeInTheDocument()
+        expect(screen.getByText('/worktrees/feature')).toBeInTheDocument()
+        expect(screen.queryByText('Other session')).not.toBeInTheDocument()
+        expect(onConfirm).not.toHaveBeenCalled()
+    })
+
     it('shows the working directory for local Codex sessions', () => {
         renderDialog([
             {
@@ -75,7 +90,7 @@ describe('CodexSessionSyncDialog', () => {
 
         expect(screen.queryByText('Project one')).not.toBeInTheDocument()
         expect(screen.getByText('Project two')).toBeInTheDocument()
-        expect(screen.getByLabelText('Work directory')).toHaveValue('/home/user/project-two')
+        expect(screen.getByLabelText('Project')).toHaveValue('/home/user/project-two')
     })
 
     it('keeps all work directories when the current session directory is not in Codex sessions', () => {
@@ -90,7 +105,7 @@ describe('CodexSessionSyncDialog', () => {
         ], undefined, null, undefined, '/home/user/project-missing')
 
         expect(screen.getByText('Project one')).toBeInTheDocument()
-        expect(screen.getByLabelText('Work directory')).toHaveValue('__all__')
+        expect(screen.getByLabelText('Project')).toHaveValue('__all__')
     })
 
     it('filters sessions by working directory', () => {
@@ -111,7 +126,7 @@ describe('CodexSessionSyncDialog', () => {
             }
         ])
 
-        fireEvent.change(screen.getByLabelText('Work directory'), {
+        fireEvent.change(screen.getByLabelText('Project'), {
             target: { value: '/home/user/project-two' }
         })
 
@@ -138,7 +153,7 @@ describe('CodexSessionSyncDialog', () => {
             }
         ], onConfirm)
 
-        fireEvent.change(screen.getByLabelText('Work directory'), {
+        fireEvent.change(screen.getByLabelText('Project'), {
             target: { value: '/home/user/project-two' }
         })
         fireEvent.click(screen.getByRole('button', { name: 'Select all' }))
@@ -176,7 +191,7 @@ describe('CodexSessionSyncDialog', () => {
             expect(screen.getByText('1 sessions selected')).toBeInTheDocument()
         })
 
-        fireEvent.change(screen.getByLabelText('Work directory'), {
+        fireEvent.change(screen.getByLabelText('Project'), {
             target: { value: '/home/user/project-two' }
         })
         fireEvent.click(screen.getByRole('button', { name: 'Select all' }))

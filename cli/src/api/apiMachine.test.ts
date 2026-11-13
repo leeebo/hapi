@@ -134,7 +134,7 @@ async function callCursorChatStoreStatus(
     return JSON.parse(raw) as unknown
 }
 
-async function callListCodexSessions(client: ApiMachineClient, machineId: string, params: { cwd?: string | null; sessionIds?: string[] }): Promise<unknown> {
+async function callListCodexSessions(client: ApiMachineClient, machineId: string, params: { cwd?: string | null; sessionIds?: string[]; all?: boolean }): Promise<unknown> {
     const manager = (client as unknown as { rpcHandlerManager: { handleRequest: (req: { method: string; params: string }) => Promise<string> } }).rpcHandlerManager
     const raw = await manager.handleRequest({
         method: `${machineId}:listCodexSessions`,
@@ -593,6 +593,32 @@ describe('ApiMachineClient Codex transcript handlers', () => {
             expect(result).toMatchObject({ success: true })
             const sessions = (result as { sessions: Array<{ id: string }> }).sessions
             expect(sessions.map((session) => session.id)).toEqual(['allowed-session-id'])
+        } finally {
+            client.shutdown()
+        }
+    })
+
+    it('returns more than 200 summaries for catch-up without weakening workspace filtering', async () => {
+        for (let i = 0; i < 205; i++) {
+            writeCodexTranscript(codexHome, `allowed-${i}.jsonl`, {
+                id: `allowed-${i}`, cwd: workspaceRoot, timestamp: '2026-01-01T00:00:00Z',
+                thread_source: i % 2 ? 'user' : 'agent_created_thread'
+            }, 'prompt')
+        }
+        writeCodexTranscript(codexHome, 'outside.jsonl', { id: 'outside', cwd: outsideRoot }, 'outside')
+        writeCodexTranscript(codexHome, 'child.jsonl', {
+            id: 'child', cwd: workspaceRoot, source: { subagent: 'worker' }, thread_source: 'subagent'
+        }, 'internal')
+        const machine = makeMachine('codex-catch-up')
+        const client = new ApiMachineClient('cli-token', machine, [workspaceRoot])
+        try {
+            const result = await callListCodexSessions(client, machine.id, { all: true }) as {
+                sessions: Array<{ id: string; createdAt: number; messages?: unknown[] }>
+            }
+            expect(result.sessions).toHaveLength(205)
+            expect(result.sessions.every(s => s.id.startsWith('allowed-'))).toBe(true)
+            expect(result.sessions.every(s => s.createdAt === Date.parse('2026-01-01T00:00:00Z'))).toBe(true)
+            expect(result.sessions.every(s => s.messages === undefined)).toBe(true)
         } finally {
             client.shutdown()
         }
